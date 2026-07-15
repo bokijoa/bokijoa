@@ -1,0 +1,1954 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>파인을 위한 실사출력 견적 마스터 (FINE Communications)</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- React 18 Production UMD CDNs -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  
+  <!-- Babel Standalone (JSX 컴파일용) -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Google Fonts: Inter 주입 (글로벌 표준 가독성 서체) -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <!-- LaTeX 수학 수식 렌더링을 위한 MathJax CDN -->
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+  <!-- 글로벌 서체 및 인쇄(Print) 특화 최적화 CSS 수립 -->
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 3px;
+    }
+
+    /* 브라우저 실물 인쇄 전용 CSS 정의 - 부모 상속 차단 및 다이렉트 A4 피팅 */
+    @media print {
+      @page {
+        size: A4;
+        margin: 0;
+      }
+      body {
+        background-color: #ffffff !important;
+        color: #000000 !important;
+      }
+      /* 인쇄 시 화면 내의 견적 프로그램 GNB 및 설계기는 전면 무시 처리 */
+      #root-calculator, header, footer, button, .no-print {
+        display: none !important;
+      }
+      /* 인쇄 대상 전체를 덮고 있는 바깥 오버레이 레이어의 불필요한 배경/그림자 투명화 */
+      .print-modal-overlay {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        height: auto !important;
+        background: transparent !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        overflow: visible !important;
+        display: block !important;
+      }
+      /* 인쇄 시 조작 세팅용 패널바 상하단을 완벽하게 숨김 */
+      .print-modal-overlay > div > div:first-child, 
+      .print-modal-overlay > div > div:nth-child(2),
+      .print-modal-overlay > div > div:last-child {
+        display: none !important;
+      }
+      /* 중간 컨테이너의 제한된 맥스 가로 세로 스케일 무력화 */
+      .print-modal-overlay > div {
+        background: transparent !important;
+        max-height: none !important;
+        overflow: visible !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        width: 100% !important;
+        max-width: none !important;
+        box-shadow: none !important;
+        border: none !important;
+      }
+      /* 인쇄 대상 견적 영수증 영역만 무조건 100% 비율로 단독 노출 */
+      #printable-estimate-sheet {
+        display: block !important;
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 210mm !important;
+        height: 297mm !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 40px !important; /* p-10과 일치 */
+        margin: 0 !important;
+        page-break-inside: avoid;
+        box-sizing: border-box !important;
+      }
+      /* 수기 직접 기입 인풋 영역 플레이스홀더 및 인풋 윤곽선 무음화 */
+      input::placeholder {
+        color: transparent !important;
+      }
+      input {
+        border: none !important;
+        box-shadow: none !important;
+        background: transparent !important;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased selection:bg-violet-100">
+
+  <!-- React 마운트 지점 -->
+  <div id="root"></div>
+
+  <!-- React & App 스크립트 작성 -->
+  <script type="text/babel">
+    const { useState, useMemo, useEffect } = React;
+
+    // 원단 및 부속 자재 초기 단가 정보 정의 (천소재 / 접착용소재 / 비접착소재)
+    const INITIAL_PRICES = {
+      '천소재': {
+        '일반 현수막': 7000,
+        '연결 현수막': 10000,
+        '텐트 천': 7000,
+        '블라인드 천': 7000,
+        '부직포': 8000,
+        '솔벤 현수막': 10000
+      },
+      '접착용소재': {
+        '켈지': 35000,
+        '유포지': 35000,
+        '투명 시트지': 35000,
+        '래핑지': 35000,
+        'UV 시트지': 35000,
+        '시트지': 35000
+      },
+      '비접착소재': {
+        '3T': 30000,
+        '5T': 40000,
+        '8T': 55000,
+        '10T': 70000
+      },
+      processing: {
+        '각목과 줄': 2000,
+        '일반 타공': 500,
+        '텐트 타공': 1000,
+        '봉미싱': 2000,
+        '사방 밴드미싱': 5000
+      },
+      additional: {
+        'S자고리': 500,
+        '뽁뽁이': 500
+      }
+    };
+
+    function App() {
+      const [prices, setPrices] = useState(INITIAL_PRICES);
+      const [cart, setCart] = useState([]);
+      
+      // 입력 폼 상태 (기본 밀리미터 단위 초기값 1000mm)
+      const [category, setCategory] = useState('천소재'); 
+      const [material, setMaterial] = useState('일반 현수막');
+      const [width, setWidth] = useState('1000'); // mm 단위
+      const [height, setHeight] = useState('1000'); // mm 단위
+      const [quantity, setQuantity] = useState(1);
+      
+      // 디자인 비용 상태군
+      const [designType, setDesignType] = useState('파일'); // 파일 | 간단 | 기본 | 고급 | 디자인비
+      const [customDesignPrice, setCustomDesignPrice] = useState(''); // 직접 입력한 디자인 가격
+
+      // 후가공 선택 상태 분류 (일반 선택형 vs 수량형 타공)
+      const [selectedProcessing, setSelectedProcessing] = useState([]); 
+      const [tagongQtys, setTagongQtys] = useState({
+        '일반 타공': 0,
+        '텐트 타공': 0
+      });
+
+      // 추가 소모품 수량 (총 주문 수량 연산과 완전히 독립됨)
+      const [selectedAdditional, setSelectedAdditional] = useState({
+        'S자고리': 0,
+        '뽁뽁이': 0
+      });
+
+      // 공식 견적서 정보 입력용 상태 변수군
+      const [showQuotation, setShowQuotation] = useState(false);
+      const [estimateCustomer, setEstimateCustomer] = useState(''); // 공급받는 자
+      const [estimateTitle, setEstimateCustomerTitle] = useState(''); // 건명
+      const [estimateValidity, setEstimateValidity] = useState('제출일로부터 15일간'); // 견적유효기간
+      const [showSeal, setShowSeal] = useState(true); // 공식 직인 표출 여부
+      const [estimateManager, setEstimateManager] = useState(''); // 담당자 정보 추가
+      
+      // 발행일자 거래처별 임의 편집을 위한 전용 Date 상태 선언 (초기값 당일)
+      const [estimateDate, setEstimateDate] = useState(() => {
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+      });
+
+      // 견적서 내 미입력 빈 행에 수기로 즉각 타이핑할 수 있게 하는 5슬롯 동적 상태 수립
+      const [manualInputs, setManualInputs] = useState(
+        Array.from({ length: 5 }, () => ({ spec: '', qty: '', price: '' }))
+      );
+
+      // 관리자 시스템 상태 및 신규 단가 추가용 로컬 버퍼 상태군
+      const [showAdmin, setShowAdmin] = useState(false);
+      const [adminPassword, setAdminPassword] = useState('');
+      const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+      const [editablePrices, setEditablePrices] = useState(INITIAL_PRICES);
+
+      // 단가 관리 내 신규 동적 제품/가공명 추가용 입력 필드 버퍼
+      const [newInputName, setNewItemName] = useState({
+        '천소재': '',
+        '접착용소재': '',
+        '비접착소재': '',
+        'processing': '',
+        'additional': ''
+      });
+      const [newInputPrice, setNewItemPrice] = useState({
+        '천소재': '',
+        '접착용소재': '',
+        '비접착소재': '',
+        'processing': '',
+        'additional': ''
+      });
+
+      // 모달 알림창 상태
+      const [alertModal, setAlertModal] = useState({
+        isOpen: false,
+        title: '',
+        message: '',
+        type: 'success'
+      });
+
+      useEffect(() => {
+        if (window.MathJax && window.MathJax.typesetPromise) {
+          window.MathJax.typesetPromise();
+        }
+      }, [category, material, width, height, cart, alertModal.isOpen, designType, showQuotation, manualInputs]);
+
+      const handleCategoryChange = (newCat) => {
+        setCategory(newCat);
+        const materials = Object.keys(prices[newCat]);
+        setMaterial(materials[0]);
+      };
+
+      const showAlert = (title, message, type = 'success') => {
+        setAlertModal({ isOpen: true, title, message, type });
+      };
+
+      const handleProcessingToggle = (name) => {
+        if (selectedProcessing.includes(name)) {
+          setSelectedProcessing(selectedProcessing.filter(item => item !== name));
+        } else {
+          setSelectedProcessing([...selectedProcessing, name]);
+        }
+      };
+
+      const handleTagongQtyChange = (name, val) => {
+        const parsed = parseInt(val) || 0;
+        setTagongQtys({
+          ...tagongQtys,
+          [name]: Math.max(0, parsed)
+        });
+      };
+
+      const handleAdditionalQtyChange = (name, val) => {
+        const parsed = parseInt(val) || 0;
+        setSelectedAdditional({
+          ...selectedAdditional,
+          [name]: Math.max(0, parsed)
+        });
+      };
+
+      // 디자인 금액 연산
+      const designCost = useMemo(() => {
+        switch (designType) {
+          case '파일':
+            return 0;
+          case '간단':
+            return 5000;
+          case '기본':
+            return 10000;
+          case '고급':
+            return 30000;
+          case '디자인비':
+            return parseInt(customDesignPrice, 10) || 0;
+          default:
+            return 0;
+        }
+      }, [designType, customDesignPrice]);
+
+      const currentCalculation = useMemo(() => {
+        const wNum = parseFloat(width) || 0;
+        const hNum = parseFloat(height) || 0;
+        
+        const area = (wNum / 1000) * (hNum / 1000); 
+        const unitPrice = prices[category][material] || 0;
+        
+        let materialCost = area * unitPrice;
+
+        // 접착용소재 0.3 회배 이하 최소 금액 3,500원 적용 보증
+        let isAdhesiveMinimumApplied = false;
+        if (category === '접착용소재') {
+          if (area <= 0.3 && area > 0) {
+            materialCost = 3500;
+            isAdhesiveMinimumApplied = true;
+          }
+        }
+
+        materialCost = Math.round(materialCost);
+
+        // 일반 후가공 합산
+        const binaryCost = selectedProcessing.reduce((sum, name) => {
+          return sum + (prices.processing[name] || 0);
+        }, 0);
+
+        // 수량제 타공 비용 합산
+        const tagongCost = Object.entries(tagongQtys).reduce((sum, [name, qty]) => {
+          return sum + ((prices.processing[name] || 0) * qty);
+        }, 0);
+
+        const processingCost = binaryCost + tagongCost;
+
+        // 추가 구성품 비용 합계 (독립 연산 대상)
+        const additionalCost = Object.entries(selectedAdditional).reduce((sum, [name, qty]) => {
+          return sum + ((prices.additional[name] || 0) * qty);
+        }, 0);
+
+        // (소재 원가 + 후가공비)는 주문수량과 곱셈 처리
+        const printSubtotal = materialCost + processingCost;
+        
+        // 추가구성품 및 디자인비용은 총 주문 수량(quantity)에 곱하지 않고 종합합계에서 순수 단독 덧셈 처리
+        const total = (printSubtotal * quantity) + additionalCost + designCost;
+
+        return {
+          area: area.toFixed(3),
+          materialCost,
+          processingCost,
+          additionalCost, 
+          designCost, 
+          unitTotal: printSubtotal, 
+          total, 
+          isAdhesiveMinimumApplied
+        };
+      }, [category, material, width, height, quantity, selectedProcessing, tagongQtys, selectedAdditional, prices, designCost]);
+
+      const handleAddToCart = () => {
+        const wNum = parseFloat(width) || 0;
+        const hNum = parseFloat(height) || 0;
+
+        if (wNum <= 0 || hNum <= 0 || quantity <= 0) {
+          showAlert('입력값 오류', '가로 길이, 세로 길이 및 수량은 0보다 커야 합니다.', 'error');
+          return;
+        }
+
+        const currentProcessingList = [];
+        selectedProcessing.forEach(name => {
+          currentProcessingList.push({ name, price: prices.processing[name], qty: 1 });
+        });
+        Object.entries(tagongQtys).forEach(([name, qty]) => {
+          if (qty > 0) {
+            currentProcessingList.push({ name, price: prices.processing[name], qty });
+          }
+        });
+
+        const newItem = {
+          id: Date.now() + Math.random().toString(36).substr(2, 9),
+          category,
+          categoryLabel: category === '천소재' ? '천소재' : category === '접착용소재' ? '접착용소재' : '비접착소재',
+          material,
+          width: wNum,
+          height: hNum,
+          area: currentCalculation.area,
+          quantity,
+          materialCost: currentCalculation.materialCost,
+          processing: currentProcessingList,
+          designType,
+          designCost: currentCalculation.designCost, 
+          additional: Object.entries(selectedAdditional)
+            .filter(([_, qty]) => qty > 0)
+            .map(([name, qty]) => ({ name, qty, price: prices.additional[name] })),
+          additionalTotalCost: currentCalculation.additionalCost, 
+          isAdhesiveMinimumApplied: currentCalculation.isAdhesiveMinimumApplied,
+          unitTotal: currentCalculation.unitTotal, 
+          total: currentCalculation.total
+        };
+
+        setCart([...cart, newItem]);
+        showAlert('추가 완료', `"${material}" 항목을 장바구니에 정상 수납하였습니다.`, 'success');
+        
+        // 입력 폼 초기화 (치수 규격은 편의상 유지, 디자인비 및 부재료 초기화)
+        setSelectedProcessing([]);
+        setTagongQtys({ '일반 타공': 0, '텐트 타공': 0 });
+        setSelectedAdditional({ 'S자고리': 0, '뽁뽁이': 0 });
+        setDesignType('파일');
+        setCustomDesignPrice('');
+        setQuantity(1);
+      };
+
+      const updateCartItemQty = (id, newQty) => {
+        const qty = Math.max(1, parseInt(newQty) || 1);
+        setCart(cart.map(item => {
+          if (item.id === id) {
+            return {
+              ...item,
+              quantity: qty,
+              // 수량 변동 시에도 추가구성품 및 디자인비용은 수량 곱셈 대상에서 완전히 배제
+              total: (item.unitTotal * qty) + item.additionalTotalCost + item.designCost
+            };
+          }
+          return item;
+        }));
+      };
+
+      const deleteCartItem = (id) => {
+        setCart(cart.filter(item => item.id !== id));
+      };
+
+      // 장바구니에 담긴 내역의 공급가액 총계
+      const totalCartPrice = useMemo(() => {
+        return cart.reduce((sum, item) => sum + item.total, 0);
+      }, [cart]);
+
+      // 사용자가 견적서 내에 직접 수기 기입한 슬롯들의 공급가액을 계산하여 반영하는 로직
+      const quoteSubtotal = useMemo(() => {
+        let sum = totalCartPrice;
+        // 5개 슬롯 중 cart 내역을 제외한 나머지 빈 슬롯의 수기 입력값을 동적 합산
+        for (let i = cart.length; i < 5; i++) {
+          const input = manualInputs[i];
+          if (input) {
+            const q = parseInt(input.qty) || 0;
+            const p = parseInt(input.price) || 0;
+            sum += q * p;
+          }
+        }
+        return sum;
+      }, [totalCartPrice, cart.length, manualInputs]);
+
+      // 실시간 수기 통합 VAT(10%) 계산
+      const quoteVat = useMemo(() => {
+        return Math.round(quoteSubtotal * 0.1);
+      }, [quoteSubtotal]);
+
+      // 1. 최종 합계 금액 100원 단위 미만 절사 연산 적용
+      const quoteTotal = useMemo(() => {
+        const exactTotal = quoteSubtotal + quoteVat;
+        return Math.floor(exactTotal / 100) * 100;
+      }, [quoteSubtotal, quoteVat]);
+
+      // 실시간 카트 요약 패널 내 100원 단위 미만 절사 합계 적용
+      const totalVat = useMemo(() => {
+        return Math.round(totalCartPrice * 0.1);
+      }, [totalCartPrice]);
+
+      const totalCartPriceWithVat = useMemo(() => {
+        const exactTotal = totalCartPrice + totalVat;
+        return Math.floor(exactTotal / 100) * 100;
+      }, [totalCartPrice, totalVat]);
+
+      const handleAdminLogin = () => {
+        if (adminPassword === 'pine1234') {
+          setIsAdminAuthenticated(true);
+          setEditablePrices(JSON.parse(JSON.stringify(prices)));
+          showAlert('인증 통과', '마스터 보안 계정 승인이 완료되었습니다. 이제 자유롭게 실시간 단가 및 신규 항목을 원장 조작할 수 있습니다.', 'success');
+        } else {
+          showAlert('인증 실패', '관리자 마스터 비밀번호가 불일치합니다.', 'error');
+        }
+      };
+
+      const handlePriceFieldChange = (cat, key, val) => {
+        const numVal = Math.max(0, parseInt(val) || 0);
+        setEditablePrices({
+          ...editablePrices,
+          [cat]: {
+            ...editablePrices[cat],
+            [key]: numVal
+          }
+        });
+      };
+
+      // 2. 단가 관리 시스템 내 동적 항목 추가(CRUD) 핸들러 수립
+      const handleAddNewItem = (categoryKey) => {
+        const name = newInputName[categoryKey]?.trim();
+        const priceVal = parseInt(newInputPrice[categoryKey], 10) || 0;
+
+        if (!name) {
+          showAlert('추가 실패', '추가할 제품/가공 명칭을 성실히 적어 주십시오.', 'error');
+          return;
+        }
+
+        if (editablePrices[categoryKey][name] !== undefined) {
+          showAlert('중복 경고', '이미 원장 내에 동일한 명칭의 항목이 존재합니다.', 'error');
+          return;
+        }
+
+        // 임시 원장 상태에 즉각 덧셈 등록
+        setEditablePrices({
+          ...editablePrices,
+          [categoryKey]: {
+            ...editablePrices[categoryKey],
+            [name]: priceVal
+          }
+        });
+
+        // 입력창 비우기
+        setNewItemName({ ...newInputName, [categoryKey]: '' });
+        setNewItemPrice({ ...newInputPrice, [categoryKey]: '' });
+        showAlert('항목 임시 추가', `"${name}" 항목이 목록 아래에 준비되었습니다. '수정 단가 저장 및 즉각 반영' 버튼을 누르시면 최종 동기화됩니다.`, 'info');
+      };
+
+      // 단가 관리 내 특정 자재 영구 소거
+      const handleRemoveItem = (categoryKey, itemKey) => {
+        const categoryData = { ...editablePrices[categoryKey] };
+        delete categoryData[itemKey];
+
+        setEditablePrices({
+          ...editablePrices,
+          [categoryKey]: categoryData
+        });
+      };
+
+      const handleSavePrices = () => {
+        if (!isAdminAuthenticated) {
+          showAlert('인증 누락', '단가 설정을 변경하기 전 마스터 보안 인증을 먼저 통과해 주십시오.', 'error');
+          return;
+        }
+        setPrices(editablePrices);
+        showAlert('원장 반영 성공', '수정된 단가 정보 및 추가/삭제된 신규 품목 리스트가 실시간 계산기 시스템에 전역 동기화되었습니다.', 'success');
+      };
+
+      const handleAdminLogout = () => {
+        setIsAdminAuthenticated(false);
+        setAdminPassword('');
+        setShowAdmin(false);
+      };
+
+      // 텍스트 클립보드 복사 시에도 수기 작성 데이터가 연동된 quote 수치 기준으로 동적 변환
+      const handleCopyToClipboard = () => {
+        if (cart.length === 0) return;
+        const textSummary = cart.map((item, idx) => {
+          const designInfo = item.designCost > 0 ? ` | 디자인비: ${item.designCost.toLocaleString()}원(${item.designType})` : '';
+          const addText = item.additional.length > 0 
+            ? ` | 추가구성품: ${item.additional.map(a => `${a.name}(${a.qty}개)`).join(', ')}`
+            : '';
+          return `[${idx+1}] ${item.material} - ${item.width}x${item.height}mm | ${item.quantity}개${designInfo}${addText} | ${item.total.toLocaleString()}원`;
+        }).join('\n');
+        
+        const fullText = `[파인애플 실사출력 견적서]
+
+${textSummary}
+
+====================
+합계(공급가액): ${quoteSubtotal.toLocaleString()}원
+부가세(VAT 10%): ${quoteVat.toLocaleString()}원
+최종 합계(VAT 포함, 100원미만 절사): ${quoteTotal.toLocaleString()}원
+
+* 본 가격은 FINE Communications 표준 단가표 기준입니다.`;
+        
+        const el = document.createElement('textarea');
+        el.value = fullText;
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand('copy');
+        document.body.removeChild(el);
+        
+        showAlert('클립보드 복사 완료', '견적 전표 상세 전문(100원미만 절사본 포함)이 성공적으로 클립보드에 전송되었습니다.', 'success');
+      };
+
+      // YYYY-MM-DD 상태를 국문 "년 월 일" 포맷으로 자동 변환
+      const todayDateString = useMemo(() => {
+        if (!estimateDate) return '';
+        const parts = estimateDate.split('-');
+        if (parts.length === 3) {
+          return `${parts[0]}년 ${parts[1]}월 ${parts[2]}일`;
+        }
+        return estimateDate;
+      }, [estimateDate]);
+
+      return (
+        <div className="min-h-screen flex flex-col justify-between bg-slate-50">
+          
+          {/* GNB (Header) - Black & Violet Theme */}
+          <header className="bg-neutral-900 text-white shadow-md sticky top-0 z-40 border-b border-neutral-800">
+            <div className="max-w-[1500px] mx-auto px-5 py-3 flex flex-col md:flex-row justify-between items-center gap-4">
+              
+              {/* 타이틀 및 소재 분류 */}
+              <div className="flex flex-col md:flex-row items-center gap-6 w-full md:w-auto">
+                <div className="text-left">
+                  <h1 className="text-xl font-black tracking-tight flex items-center gap-2">
+                    파인을 위한 실사출력 견적 마스터
+                    <span className="text-[10px] bg-violet-600 text-white font-extrabold px-2 py-0.5 rounded uppercase tracking-wider">FINE</span>
+                  </h1>
+                </div>
+
+                <div className="flex bg-neutral-800 p-1 rounded-xl border border-neutral-700/60 w-full md:w-auto overflow-x-auto">
+                  {[
+                    { id: '천소재', label: '천소재' },
+                    { id: '접착용소재', label: '접착용소재' },
+                    { id: '비접착소재', label: '비접착소재' }
+                  ].map((catObj) => (
+                    <button
+                      key={catObj.id}
+                      type="button"
+                      onClick={() => handleCategoryChange(catObj.id)}
+                      className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                        category === catObj.id
+                          ? 'bg-violet-600 text-white shadow-sm'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {catObj.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              {/* 우측 관리 시스템 */}
+              <div className="flex items-center justify-between md:justify-end gap-4 w-full md:w-auto border-t md:border-t-0 border-neutral-800 pt-2.5 md:pt-0">
+                <span className="text-xs text-slate-400 font-semibold tracking-wider">FINE Communications</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setShowAdmin(true);
+                      if (!isAdminAuthenticated) {
+                        setAdminPassword('');
+                      }
+                    }}
+                    className="bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg border border-neutral-700 transition-all active:scale-95"
+                  >
+                    단가 관리 시스템
+                  </button>
+                  {isAdminAuthenticated && (
+                    <span className="bg-violet-500 text-white text-[10px] font-bold px-2 py-1 rounded-full animate-pulse">
+                      마스터 활성
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </header>
+
+          {/* Main Layout: Fixed 1:1 Split (md:grid-cols-2) */}
+          <main id="root-calculator" className="flex-1 max-w-[1500px] mx-auto w-full px-5 py-5 grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
+            
+            {/* Left Column: Calculator */}
+            <section className="flex flex-col gap-5">
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-violet-600"></span>
+                    <h2 className="font-bold text-slate-800 text-base">실시간 견적 설계기</h2>
+                  </div>
+                  <span className="text-xs text-slate-400 font-semibold">단위: mm, KRW</span>
+                </div>
+
+                <div className="p-5 flex flex-col gap-5">
+                  
+                  {/* 원단지정 */}
+                  <div>
+                    <label className="block text-sm text-violet-600 font-medium uppercase tracking-wider mb-2">세부 소재 / 원단 지정</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {Object.keys(prices[category]).map((matName) => (
+                        <button
+                          key={matName}
+                          type="button"
+                          onClick={() => setMaterial(matName)}
+                          className={`py-2 px-3 text-left rounded-xl border text-xs transition-all relative overflow-hidden ${
+                            material === matName
+                              ? 'border-violet-600 bg-violet-50 text-slate-900 font-bold ring-1 ring-violet-500'
+                              : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-500 font-medium'
+                          }`}
+                        >
+                          <div className="truncate pr-4">{matName}</div>
+                          <div className="text-[11px] text-slate-400 mt-0.5 font-normal">
+                            회배당 {prices[category][matName]?.toLocaleString()}원
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 규격 입력 */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="text-xs font-semibold text-slate-600">가로 길이 (mm)</label>
+                        <span className="text-[11px] text-slate-400">
+                          {width === '' ? '0.00' : (parseFloat(width) / 1000).toFixed(2)} m
+                        </span>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          placeholder="가로 입력"
+                          value={width}
+                          onChange={(e) => setWidth(e.target.value)}
+                          className="w-full pl-3 pr-12 py-1.5 rounded-lg border border-slate-300 text-sm focus:border-violet-600 focus:ring-1 focus:ring-violet-500 focus:outline-none font-medium"
+                        />
+                        <span className="absolute right-3 top-1.5 text-xs text-slate-400 font-bold">mm</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="text-xs font-semibold text-slate-600">세로 길이 (mm)</label>
+                        <span className="text-[11px] text-slate-400">
+                          {height === '' ? '0.00' : (parseFloat(height) / 1000).toFixed(2)} m
+                        </span>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          placeholder="세로 입력"
+                          value={height}
+                          onChange={(e) => setHeight(e.target.value)}
+                          className="w-full pl-3 pr-12 py-1.5 rounded-lg border border-slate-300 text-sm focus:border-violet-600 focus:ring-1 focus:ring-violet-500 focus:outline-none font-medium"
+                        />
+                        <span className="absolute right-3 top-1.5 text-xs text-slate-400 font-bold">mm</span>
+                      </div>
+                    </div>
+
+                    <div className="sm:col-span-2 pt-2 border-t border-slate-200 flex justify-between items-center text-xs">
+                      <div className="text-slate-500 font-semibold">
+                        총 환산 면적: <span className="font-bold text-slate-800 text-sm">{currentCalculation.area} 회배(m²)</span>
+                      </div>
+                      {category === '접착용소재' && (parseFloat(width) * parseFloat(height) / 1000000) <= 0.3 && (
+                        <div className="text-[10px] text-violet-800 bg-violet-100 px-2 py-0.5 rounded-md font-bold border border-violet-200/50">
+                          0.3회배 이하 3,500원 최소금액 적용
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 디자인 비용 설정 */}
+                  <div>
+                    <label className="block text-sm text-violet-600 font-medium uppercase tracking-wider mb-2">디자인비용 설정</label>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {[
+                        { id: '파일', label: '파일 (0원)' },
+                        { id: '간단', label: '간단 (5,000원)' },
+                        { id: '기본', label: '기본 (10,000원)' },
+                        { id: '고급', label: '고급 (30,000원)' },
+                        { id: '디자인비', label: '디자인비 (직접 입력)' }
+                      ].map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            setDesignType(item.id);
+                            if (item.id !== '디자인비') setCustomDesignPrice('');
+                          }}
+                          className={`py-2 px-2.5 text-center rounded-xl border text-xs transition-all ${
+                            designType === item.id
+                              ? 'border-violet-600 bg-violet-50 text-slate-900 font-bold'
+                              : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-500 font-medium'
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* 직접입력 폼 노출 */}
+                    {designType === '디자인비' && (
+                      <div className="mt-2.5 bg-slate-50 p-3 rounded-lg border border-slate-200 flex flex-col gap-1">
+                        <label className="text-xs font-semibold text-slate-600">디자인비 직접 입력 (원)</label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            placeholder="단독 합산할 디자인 금액을 입력하십시오"
+                            value={customDesignPrice}
+                            onChange={(e) => setCustomDesignPrice(e.target.value)}
+                            className="w-full pl-3 pr-10 py-1.5 rounded-lg border border-slate-300 text-xs focus:border-violet-600 focus:outline-none font-medium text-right"
+                          />
+                          <span className="absolute right-3 top-1.5 text-xs text-slate-400 font-bold">원</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 후가공 설정 */}
+                  <div>
+                    <label className="block text-sm text-violet-600 font-medium uppercase tracking-wider mb-2">후가공 설정 및 타공 개수 조절</label>
+                    <div className="flex flex-col gap-2.5">
+                      
+                      {/* 일반 가공 (체크박스형) */}
+                      <div className="grid grid-cols-3 gap-2">
+                        {Object.entries(prices.processing)
+                          .filter(([procName]) => procName !== '일반 타공' && procName !== '텐트 타공')
+                          .map(([procName, price]) => {
+                            const isSelected = selectedProcessing.includes(procName);
+                            return (
+                              <button
+                                key={procName}
+                                type="button"
+                                onClick={() => handleProcessingToggle(procName)}
+                                className={`p-2.5 text-xs rounded-xl border text-center transition-all ${
+                                  isSelected
+                                    ? 'border-violet-600 bg-violet-50 text-slate-900 font-bold'
+                                    : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-500'
+                                }`}
+                              >
+                                <div className="truncate font-semibold">{procName}</div>
+                                <div className="text-[10px] text-slate-400 font-normal mt-0.5">+{price.toLocaleString()}원</div>
+                              </button>
+                            );
+                          })}
+                      </div>
+
+                      {/* 수량제 타공 가공 */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {['일반 타공', '텐트 타공'].map((procName) => {
+                          const qty = tagongQtys[procName] || 0;
+                          const price = prices.processing[procName] || 0;
+                          return (
+                            <div key={procName} className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 bg-white shadow-sm">
+                              <div>
+                                <div className="text-xs font-bold text-slate-700">{procName}</div>
+                                <div className="text-[10px] text-slate-400">개당 {price.toLocaleString()}원</div>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleTagongQtyChange(procName, qty - 1)}
+                                  className="w-6.5 h-6.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded flex items-center justify-center text-xs transition-all"
+                                >
+                                  -
+                                </button>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={qty}
+                                  onChange={(e) => handleTagongQtyChange(procName, e.target.value)}
+                                  className="w-9 text-center text-xs font-bold py-0.5 border border-slate-300 rounded focus:outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleTagongQtyChange(procName, qty + 1)}
+                                  className="w-6.5 h-6.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded flex items-center justify-center text-xs transition-all"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                    </div>
+                  </div>
+
+                  {/* 추가 구성품 */}
+                  <div>
+                    <div className="flex justify-between items-center mb-1.5">
+                      <label className="block text-sm text-violet-600 font-medium uppercase tracking-wider">추가 구성품 설정</label>
+                      <span className="text-[10px] text-violet-500 font-medium">*(주문 총 수량과 별개 단독 합계로 산정)*</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {Object.entries(prices.additional).map(([itemName, price]) => (
+                        <div key={itemName} className="flex items-center justify-between p-2.5 rounded-xl border border-slate-200 bg-white shadow-sm">
+                          <div>
+                            <div className="text-xs font-bold text-slate-700">{itemName}</div>
+                            <div className="text-[10px] text-slate-400">개당 {price.toLocaleString()}원</div>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleAdditionalQtyChange(itemName, selectedAdditional[itemName] - 1)}
+                              className="w-6.5 h-6.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded flex items-center justify-center text-xs transition-all"
+                            >
+                              -
+                            </button>
+                            <input
+                              type="number"
+                              min="0"
+                              value={selectedAdditional[itemName]}
+                              onChange={(e) => handleAdditionalQtyChange(itemName, e.target.value)}
+                              className="w-9 text-center text-xs font-bold py-0.5 border border-slate-300 rounded focus:outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleAdditionalQtyChange(itemName, selectedAdditional[itemName] + 1)}
+                              className="w-6.5 h-6.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded flex items-center justify-center text-xs transition-all"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 수량요약 */}
+                  <div className="border-t border-slate-150 pt-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
+                      <span className="text-xs font-extrabold text-slate-500 tracking-wider">주문 총 수량</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                          className="w-8 h-8 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold rounded-lg flex items-center justify-center text-xs transition-all"
+                        >
+                          -
+                        </button>
+                        <input
+                          type="number"
+                          min="1"
+                          value={quantity}
+                          onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                          className="w-11 h-8 text-center text-xs font-bold border border-slate-300 rounded-lg focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={(e) => setQuantity(quantity + 1)}
+                          className="w-8 h-8 bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold rounded-lg flex items-center justify-center text-xs transition-all"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="text-right w-full sm:w-auto">
+                      <div className="text-xs text-slate-400 font-medium">인쇄 장당 {currentCalculation.unitTotal.toLocaleString()}원</div>
+                      {(currentCalculation.additionalCost > 0 || currentCalculation.designCost > 0) && (
+                        <div className="text-[10px] text-violet-600 font-bold">
+                          단독 자재/디자인 합산액 +{(currentCalculation.additionalCost + currentCalculation.designCost).toLocaleString()}원
+                        </div>
+                      )}
+                      <div className="text-2xl font-black text-slate-900 tracking-tight">
+                        {currentCalculation.total.toLocaleString()}
+                        <span className="text-xs font-bold text-slate-500 ml-1">원</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleAddToCart}
+                    className="w-full py-3.5 bg-neutral-900 hover:bg-neutral-800 text-white font-extrabold text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2 active:scale-[0.99]"
+                  >
+                    이 사양으로 견적 수납
+                  </button>
+
+                </div>
+              </div>
+            </section>
+
+            {/* Right Column: Cart */}
+            <section className="flex flex-col gap-5">
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full min-h-[500px]">
+                <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-violet-500"></span>
+                    <h2 className="font-bold text-slate-800 text-base">선택한 견적 전표 ({cart.length}건)</h2>
+                  </div>
+                  {cart.length > 0 && (
+                    <button
+                      onClick={() => {
+                        setCart([]);
+                        showAlert('초기화 완료', '견적 장바구니 리스트가 완전 초기화되었습니다.', 'info');
+                      }}
+                      className="text-xs text-rose-600 hover:underline font-bold"
+                    >
+                      전체 삭제
+                    </button>
+                  )}
+                </div>
+
+                {/* Cart Items List */}
+                <div className="flex-1 overflow-y-auto p-4 max-h-[550px] flex flex-col gap-3">
+                  {cart.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center py-24 text-slate-400 gap-2">
+                      <div className="text-sm font-bold text-slate-500">생성된 견적 항목이 없습니다</div>
+                      <p className="text-xs text-slate-400">좌측 설계기에서 옵션을 선택해 견적을 담아주십시오.</p>
+                    </div>
+                  ) : (
+                    cart.map((item) => (
+                      <div key={item.id} className="p-4 rounded-xl border border-slate-200 bg-white hover:shadow-md transition-all flex flex-col gap-2 relative">
+                        {/* 삭제 버튼 */}
+                        <button
+                          onClick={() => deleteCartItem(item.id)}
+                          className="absolute right-4 top-4 text-slate-400 hover:text-rose-600 transition-colors font-bold text-[11px] bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200"
+                        >
+                          삭제
+                        </button>
+
+                        {/* 카테고리 태그 */}
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                            {item.categoryLabel}
+                          </span>
+                          {item.isAdhesiveMinimumApplied && (
+                            <span className="text-[10px] font-black px-2 py-0.5 bg-violet-50 text-violet-700 rounded-full border border-violet-100">
+                              최소단가 적용됨
+                            </span>
+                          )}
+                        </div>
+
+                        {/* 규격 및 사양 */}
+                        <div>
+                          <h4 className="font-extrabold text-slate-800 text-sm">{item.material}</h4>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            규격: {item.width}mm x {item.height}mm ({item.area} 회배)
+                          </p>
+                        </div>
+
+                        {/* 가공 방식 및 디자인 비용 내역 표시 */}
+                        {(item.processing.length > 0 || item.additional.length > 0 || item.designCost > 0) && (
+                          <div className="flex flex-wrap gap-1 mt-1 pt-2 border-t border-dashed border-slate-100">
+                            {item.designCost > 0 && (
+                              <span className="text-[10px] bg-violet-100/70 text-violet-700 px-2 py-0.5 rounded-lg border border-violet-200 font-bold">
+                                디자인비: {item.designCost.toLocaleString()}원 ({item.designType})
+                              </span>
+                            )}
+                            {item.processing.map(proc => (
+                              <span key={proc.name} className="text-[10px] bg-slate-50 text-slate-600 px-2 py-0.5 rounded-lg border border-violet-200 font-medium">
+                                {proc.name} {proc.qty > 1 ? `(${proc.qty}개)` : ''} (+{(proc.price * proc.qty).toLocaleString()}원)
+                              </span>
+                            ))}
+                            {item.additional.map(add => (
+                              <span key={add.name} className="text-[10px] bg-violet-50/50 text-violet-700 px-2 py-0.5 rounded-lg border border-violet-100 font-medium">
+                                {add.name} ({add.qty}개) - 단독 합산
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* 수량 및 소계 정보 */}
+                        <div className="flex justify-between items-center mt-2 pt-2 border-t border-slate-100">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-slate-400 font-semibold">인쇄 수량:</span>
+                            <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden bg-slate-50">
+                              <button
+                                onClick={() => updateCartItemQty(item.id, item.quantity - 1)}
+                                className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold"
+                              >
+                                -
+                              </button>
+                              <span className="px-3 py-0.5 text-xs font-bold text-slate-700">{item.quantity}</span>
+                              <button
+                                onClick={() => updateCartItemQty(item.id, item.quantity + 1)}
+                                className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold"
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="text-right">
+                            <span className="text-xs text-slate-400 block font-medium">항목 소계</span>
+                            <span className="text-sm font-black text-slate-900">
+                              {item.total.toLocaleString()}원
+                            </span>
+                          </div>
+                        </div>
+
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* 하단 집계 판넬 */}
+                <div className="p-4 border-t border-slate-200 bg-slate-50 flex flex-col gap-2">
+                  <div className="flex justify-between items-center text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    <span>합계 (공급가액)</span>
+                    <span className="text-base text-slate-800 font-extrabold">{totalCartPrice.toLocaleString()}원</span>
+                  </div>
+                  <div className="flex justify-between items-center text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    <span>부가세 (VAT 10%)</span>
+                    <span className="text-base text-slate-800 font-extrabold">{totalVat.toLocaleString()}원</span>
+                  </div>
+                  
+                  <div className="flex justify-between items-center pt-3 border-t border-slate-200 mt-1">
+                    <div>
+                      <div className="text-xs text-violet-600 font-black uppercase tracking-wider">최종 합계 (VAT 포함, 100원 절사)</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5 font-medium">실사 인쇄 및 후가공 자재 일체 비용</div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-3xl font-black text-slate-900 tracking-tight">
+                        {totalCartPriceWithVat.toLocaleString()}
+                      </span>
+                      <span className="text-sm font-bold text-slate-500 ml-1">원</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
+                    <button
+                      type="button"
+                      disabled={cart.length === 0}
+                      onClick={() => {
+                        setShowQuotation(true);
+                      }}
+                      className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all text-center flex items-center justify-center gap-1 ${
+                        cart.length === 0
+                          ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                          : 'bg-violet-600 hover:bg-violet-700 text-white shadow-sm'
+                      }`}
+                    >
+                      공식 견적서 발행
+                    </button>
+                    <button
+                      type="button"
+                      disabled={cart.length === 0}
+                      onClick={() => {
+                        showAlert('주문 접수 완료', '산출된 전표 내역의 전송 대기가 정상 처리되었습니다.', 'success');
+                      }}
+                      className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all text-center flex items-center justify-center gap-1.5 ${
+                        cart.length === 0
+                          ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                          : 'bg-neutral-900 hover:bg-neutral-800 text-white'
+                      }`}
+                    >
+                      간편 주문요청
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCopyToClipboard}
+                      disabled={cart.length === 0}
+                      className={`w-full py-2.5 rounded-xl text-xs font-bold transition-all text-center flex items-center justify-center gap-1.5 border ${
+                        cart.length === 0
+                          ? 'border-slate-200 text-slate-400 bg-slate-50 cursor-not-allowed'
+                          : 'border-slate-300 bg-white hover:bg-slate-50 text-slate-700'
+                      }`}
+                    >
+                      텍스트 복사
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+          </main>
+
+          {/* 공식 견적서 (Quotation Modal & Print Area) */}
+          {showQuotation && (
+            <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto print-modal-overlay">
+              <div className="bg-white rounded-3xl shadow-2xl max-w-5xl w-full max-h-[92vh] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-200">
+                
+                {/* 모달 조작 헤더 */}
+                <div className="p-4 border-b border-slate-100 bg-neutral-900 text-white flex justify-between items-center no-print">
+                  <div className="flex items-center gap-2">
+                    <span className="bg-violet-600 text-white text-[10px] font-black px-2 py-0.5 rounded">공식 발행 서식</span>
+                    <h3 className="font-extrabold text-sm">파인커뮤니케이션 공식 견적서 인쇄 / 저장</h3>
+                  </div>
+                  <button
+                    onClick={() => setShowQuotation(false)}
+                    className="text-slate-400 hover:text-white transition-colors text-xs font-bold"
+                  >
+                    닫기
+                  </button>
+                </div>
+
+                {/* 입력 제어 배너 */}
+                <div className="p-4 bg-violet-50 border-b border-violet-100 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3 text-xs no-print">
+                  <div className="flex flex-col gap-1">
+                    <span className="font-bold text-slate-600">수신인 (상호/성함)</span>
+                    <input 
+                      type="text" 
+                      placeholder="예) FINE 거래처 귀하" 
+                      value={estimateCustomer}
+                      onChange={(e) => setEstimateCustomer(e.target.value)}
+                      className="border border-slate-300 rounded px-2 py-1 focus:outline-violet-600 font-semibold"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="font-bold text-slate-600">견적 건명</span>
+                    <input 
+                      type="text" 
+                      placeholder="예) 창립기념일 대형 현수막 광고" 
+                      value={estimateTitle}
+                      onChange={(e) => setEstimateCustomerTitle(e.target.value)}
+                      className="border border-slate-300 rounded px-2 py-1 focus:outline-violet-600 font-semibold"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="font-bold text-slate-600">담당자명</span>
+                    <input 
+                      type="text" 
+                      placeholder="예) 홍길동 대리 (010-0000-0000)" 
+                      value={estimateManager}
+                      onChange={(e) => setEstimateManager(e.target.value)}
+                      className="border border-slate-300 rounded px-2 py-1 focus:outline-violet-600 font-semibold"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="font-bold text-slate-600">발행일자 지정</span>
+                    <input 
+                      type="date" 
+                      value={estimateDate}
+                      onChange={(e) => setEstimateDate(e.target.value)}
+                      className="border border-slate-300 rounded px-2 py-1 focus:outline-violet-600 font-semibold"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="font-bold text-slate-600">견적 유효기간</span>
+                    <input 
+                      type="text" 
+                      value={estimateValidity}
+                      onChange={(e) => setEstimateValidity(e.target.value)}
+                      className="border border-slate-300 rounded px-2 py-1 focus:outline-violet-600 font-semibold"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="font-bold text-slate-600">공식 직인 표시</span>
+                    <label className="flex items-center gap-2 mt-1.5 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={showSeal}
+                        onChange={(e) => setShowSeal(e.target.checked)}
+                        className="w-4 h-4 text-violet-600 border-slate-300 rounded focus:ring-violet-500 cursor-pointer"
+                      />
+                      <span className="font-semibold text-slate-700 select-none">직인 날인</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* A4 견적서 뷰포트 엘리먼트 */}
+                <div className="flex-1 overflow-y-auto p-8 bg-slate-100 flex justify-center">
+                  <div 
+                    id="printable-estimate-sheet"
+                    className="relative bg-white w-[210mm] h-[297mm] p-10 border border-slate-200 shadow-md text-slate-900 font-sans"
+                    style={{ boxSizing: 'border-box' }}
+                  >
+                    
+                    {/* 상단 견적서 대서명 */}
+                    <div className="pb-[140px] h-full flex flex-col justify-between" style={{ boxSizing: 'border-box' }}>
+                      <div>
+                        <div className="text-center mb-8">
+                          <h2 className="text-3xl font-black tracking-[10px] text-slate-900 uppercase">견 적 서</h2>
+                        </div>
+
+                        {/* 고객 수신서 정보 & 사업자(공급자) 정보 2단 그리드 */}
+                        <div className="grid grid-cols-12 gap-4 mb-6 items-stretch">
+                          
+                          {/* 공급받는 자 */}
+                          <div className="col-span-6 flex flex-col justify-between pb-1">
+                            <div className="flex flex-col gap-3">
+                              <div className="flex items-baseline gap-2">
+                                <span className="text-lg font-bold underline underline-offset-4 tracking-wide">
+                                  {estimateCustomer || "____________________"}
+                                </span>
+                                <span className="text-sm font-semibold">귀하</span>
+                              </div>
+                              <div className="text-xs text-slate-600 flex flex-col gap-1.5">
+                                <div><strong>발행일자:</strong> <span className="text-sm font-semibold text-slate-900">{todayDateString}</span></div>
+                                <div><strong>견적건명:</strong> {estimateTitle || "(별도 지정 없음)"}</div>
+                                <div><strong>담당자명:</strong> {estimateManager || "____________________"}</div>
+                              </div>
+                            </div>
+                            
+                            <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 mt-2">
+                              <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">견적 합계 금액 (VAT 포함, 100원 절사)</div>
+                              <div className="text-xl font-black text-violet-700 mt-1">
+                                ₩ {quoteTotal.toLocaleString()}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* 공급자 정보 */}
+                          <div className="col-span-6 border-l border-slate-200 pl-4 text-xs">
+                            <table className="w-full border-collapse border border-slate-300">
+                              <tbody>
+                                <tr>
+                                  <td className="bg-slate-50 p-1 border border-slate-300 text-center w-16 font-normal whitespace-nowrap text-[11px] tracking-tighter" style={{ letterSpacing: '-0.05em' }}>등록번호</td>
+                                  <td className="p-1 border border-slate-300 font-bold text-slate-800 text-[12px]" colSpan="3">389-81-01046</td>
+                                </tr>
+                                <tr>
+                                  <td className="bg-slate-50 p-1 border border-slate-300 text-center font-normal">상호명</td>
+                                  <td className="p-1 border border-slate-300 font-semibold whitespace-nowrap text-[11px] w-28">(주)파인커뮤니케이션</td>
+                                  <td className="bg-slate-50 p-1 border border-slate-300 text-center w-10 font-normal">대표</td>
+                                  <td className="p-1 border border-slate-300 relative font-semibold whitespace-nowrap">
+                                    이복희 
+                                    {showSeal && (
+                                      <img 
+                                        src="파인-직인-투명.png" 
+                                        alt="직인" 
+                                        className="absolute animate-fade-in"
+                                        style={{
+                                          width: '17mm',
+                                          height: '17mm',
+                                          right: '-3mm',
+                                          top: '-4mm',
+                                          pointerEvents: 'none'
+                                        }}
+                                        onError={(e) => {
+                                          e.target.style.display = 'none';
+                                        }}
+                                      />
+                                    )}
+                                  </td>
+                                </tr>
+                                <tr>
+                                  <td className="bg-slate-50 p-1 border border-slate-300 text-center font-normal">소재지</td>
+                                  <td className="p-1 border border-slate-300 text-[10px] leading-tight" colSpan="3">
+                                    광주광역시 동구 천변우로 363-10, 101호(호남동)
+                                  </td>
+                                </tr>
+                                <tr>
+                                  <td className="bg-slate-50 p-1 border border-slate-300 text-center font-normal w-16">업태</td>
+                                  <td className="p-1 border border-slate-300 text-[10px] w-24 whitespace-nowrap">제조업, 서비스</td>
+                                  <td className="bg-slate-50 p-1 border border-slate-300 text-center w-10 font-normal">종목</td>
+                                  <td className="p-1 border border-slate-300 text-[10px] leading-tight whitespace-nowrap">광고물 제작, 인쇄, 디자인</td>
+                                </tr>
+                                <tr>
+                                  <td className="bg-slate-50 p-1 border border-slate-300 text-center font-normal w-16">연락처</td>
+                                  <td className="p-1 border border-slate-300 text-[12px] font-bold text-violet-700" colSpan="3">
+                                    010-3932-3658 <span className="text-slate-400 font-normal text-[10px]">/ F: 062-433-3648</span>
+                                  </td>
+                                </tr>
+                                <tr>
+                                  <td className="bg-slate-50 p-1 border border-slate-300 text-center font-normal">이메일</td>
+                                  <td className="p-1 border border-slate-300 text-[10px]" colSpan="3">finecom88@daum.net</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+
+                        </div>
+
+                        {/* 세부 기재 테이블 목록 */}
+                        <table className="w-full border-collapse border border-slate-400 text-xs mb-6">
+                          <thead>
+                            <tr className="bg-slate-100">
+                              <th className="border border-slate-400 p-1.5 font-bold w-8">No</th>
+                              <th className="border border-slate-400 p-1.5 font-bold">세부 품목 및 규격</th>
+                              <th className="border border-slate-400 p-1.5 font-bold w-12">수량</th>
+                              <th className="border border-slate-400 p-1.5 font-bold w-24">단가</th>
+                              <th className="border border-slate-400 p-1.5 font-bold w-28">공급가액</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {/* 1. 장바구니에 이미 추가된 기성 내역들 */}
+                            {cart.map((item, idx) => {
+                              const itemSupply = item.total;
+                              const detailSpec = `${item.material} (${item.width}x${item.height}mm, ${item.area}회배)${item.processing.length > 0 ? ` [후가공: ${item.processing.map(p => p.name).join(', ')}]` : ''}${item.additional.length > 0 ? ` [추가: ${item.additional.map(a => `${a.name}(${a.qty}개)`).join(', ')}]` : ''}${item.designCost > 0 ? ` [디자인: ${item.designType}]` : ''}`;
+                              
+                              return (
+                                <tr key={item.id} className="text-center hover:bg-slate-50">
+                                  <td className="border border-slate-300 p-1.5">{idx + 1}</td>
+                                  <td className="border border-slate-300 p-1.5 text-left font-medium whitespace-pre-wrap break-all">{detailSpec}</td>
+                                  <td className="border border-slate-300 p-1.5 font-bold">{item.quantity}</td>
+                                  <td className="border border-slate-300 p-1.5 text-right font-medium">{(item.unitTotal).toLocaleString()}</td>
+                                  <td className="border border-slate-300 p-1.5 text-right font-bold">{itemSupply.toLocaleString()}</td>
+                                </tr>
+                              );
+                            })}
+                            
+                            {/* 2. 빈 행 메우기 및 동적 수기 타이핑 셀 */}
+                            {cart.length < 5 && Array.from({ length: 5 - cart.length }).map((_, idx) => {
+                              const i = cart.length + idx; 
+                              return (
+                                <tr key={`manual-${i}`} className="text-center hover:bg-slate-50">
+                                  <td className="border border-slate-300 p-1.5 text-slate-400">{i + 1}</td>
+                                  <td className="border border-slate-300 p-1.5 text-left font-medium">
+                                    <input 
+                                      type="text" 
+                                      placeholder="직접 입력 가능 (품목 및 규격)"
+                                      value={manualInputs[i].spec}
+                                      onChange={(e) => {
+                                        const newInputs = [...manualInputs];
+                                        newInputs[i].spec = e.target.value;
+                                        setManualInputs(newInputs);
+                                      }}
+                                      className="w-full bg-transparent p-0 m-0 border-0 focus:ring-0 focus:outline-none focus:bg-slate-50 text-left font-medium text-xs text-slate-800 placeholder-slate-300 rounded-none transition-all print:text-black print:placeholder-transparent"
+                                    />
+                                  </td>
+                                  <td className="border border-slate-300 p-1.5 text-center font-bold">
+                                    <input 
+                                      type="text" 
+                                      placeholder="0"
+                                      value={manualInputs[i].qty}
+                                      onChange={(e) => {
+                                        const cleanVal = e.target.value.replace(/[^0-9]/g, '');
+                                        const newInputs = [...manualInputs];
+                                        newInputs[i].qty = cleanVal;
+                                        setManualInputs(newInputs);
+                                      }}
+                                      className="w-full bg-transparent p-0 m-0 border-0 focus:ring-0 focus:outline-none focus:bg-slate-50 text-center font-bold text-xs text-slate-800 placeholder-slate-300 rounded-none transition-all print:text-black print:placeholder-transparent"
+                                    />
+                                  </td>
+                                  <td className="border border-slate-300 p-1.5 text-right font-medium">
+                                    <input 
+                                      type="text" 
+                                      placeholder="0"
+                                      value={manualInputs[i].price ? parseInt(manualInputs[i].price, 10).toLocaleString() : ''}
+                                      onChange={(e) => {
+                                        const cleanVal = e.target.value.replace(/[^0-9]/g, '');
+                                        const newInputs = [...manualInputs];
+                                        newInputs[i].price = cleanVal;
+                                        setManualInputs(newInputs);
+                                      }}
+                                      className="w-full bg-transparent p-0 m-0 border-0 focus:ring-0 focus:outline-none focus:bg-slate-50 text-right font-medium text-xs text-slate-800 placeholder-slate-300 rounded-none transition-all print:text-black print:placeholder-transparent"
+                                    />
+                                  </td>
+                                  <td className="border border-slate-300 p-1.5 text-right font-bold text-slate-800">
+                                    {((parseInt(manualInputs[i].qty) || 0) * (parseInt(manualInputs[i].price) || 0) > 0) 
+                                      ? ((parseInt(manualInputs[i].qty) || 0) * (parseInt(manualInputs[i].price) || 0)).toLocaleString() 
+                                      : ''}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+
+                        {/* 하단 2분할 레이아웃 */}
+                        <div className="flex items-stretch gap-4 mb-6">
+                          
+                          {/* 좌측 박스: 유의사항 및 송금 계좌 */}
+                          <div className="w-[58%] border border-slate-300 p-3.5 rounded-xl bg-slate-50/40 text-[10px] flex flex-col justify-between">
+                            <div className="text-slate-500 font-medium leading-snug">
+                              * 본 견적서 상의 사양이 변동될 시 단가 수정이 발생할 수 있습니다.
+                            </div>
+                            <div className="border-t border-slate-200 my-1.5"></div>
+                            <div className="flex flex-col gap-1 text-slate-800">
+                              <div><strong>견적 유효기간:</strong> {estimateValidity}</div>
+                              <div className="font-bold text-slate-900 mt-1 text-[12px]">광주은행 1127-020-145967 (주)파인커뮤니케이션</div>
+                              <div className="font-bold text-slate-900 text-[12px]">농협은행 351-1239-0484-43 (주)파인커뮤니케이션</div>
+                            </div>
+                          </div>
+
+                          {/* 우측 박스: 종합 집계 테이블 */}
+                          <div className="w-[42%] flex flex-col justify-between">
+                            <table className="w-full h-full border-collapse border border-slate-400 text-xs text-slate-900">
+                              <tbody>
+                                <tr className="bg-slate-50 font-bold h-1/3">
+                                  <td className="border border-slate-300 p-2 text-left pl-3">합 계 (공급가액)</td>
+                                  <td className="border border-slate-300 p-2 text-right pr-3 font-extrabold">
+                                    {quoteSubtotal.toLocaleString()} 원
+                                  </td>
+                                </tr>
+                                <tr className="bg-slate-50 font-bold h-1/3">
+                                  <td className="border border-slate-300 p-2 text-left pl-3">부가세 (VAT 10%)</td>
+                                  <td className="border border-slate-300 p-2 text-right pr-3 font-extrabold">
+                                    {quoteVat.toLocaleString()} 원
+                                  </td>
+                                </tr>
+                                <tr className="bg-violet-50 font-black text-slate-900 h-1/3">
+                                  <td className="border border-slate-300 p-2 text-left pl-3">총 견적 합계액 (VAT 포함)</td>
+                                  <td className="border border-slate-300 p-2 text-right pr-3 text-violet-800 text-sm">
+                                    {quoteTotal.toLocaleString()} 원
+                                  </td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 수신인 및 사명, 3가지 인증마크 영역을 absolute 속성으로 A4 맨 밑바닥에 철저히 고정 */}
+                    <div 
+                      className="absolute bottom-10 left-10 right-10 border-t border-slate-200 pt-4 flex flex-col gap-4 bg-white"
+                      style={{ boxSizing: 'border-box' }}
+                    >
+                      <div className="text-sm font-bold text-slate-900 text-center animate-pulse" style={{ letterSpacing: '-0.025em' }}>
+                        주식회사 파인커뮤니케이션 FINE COMMUNICATION Co., Ltd.
+                      </div>
+
+                      {/* 3가지 인증마크 정렬 */}
+                      <div className="flex justify-center items-center gap-2 text-[11px]">
+                        <div className="flex items-center gap-1 border border-slate-300 rounded px-2 py-0.5 bg-white scale-95 origin-center">
+                          <div className="font-black text-violet-700 tracking-tighter text-xs">kidp</div>
+                          <div className="text-slate-500 font-semibold border-l border-slate-300 pl-1">
+                            산업디자인 전문회사 등록기업
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1 border border-slate-300 rounded px-2 py-0.5 bg-white scale-95 origin-center">
+                          <div className="font-bold text-emerald-700 text-xs">여성기업</div>
+                          <div className="text-slate-500 font-semibold border-l border-slate-300 pl-1">
+                            중소벤처기업부 인증기업
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1 border border-slate-300 rounded px-2 py-0.5 bg-white scale-95 origin-center">
+                          <div className="font-black text-indigo-700 tracking-tighter text-xs">KOAA</div>
+                          <div className="text-slate-500 font-semibold border-l border-slate-300 pl-1">
+                            옥외광고업 정식 등록업체
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+
+                {/* 모달 하단 조작 영역 */}
+                <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-between gap-2 no-print">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setManualInputs(Array.from({ length: 5 }, () => ({ spec: '', qty: '', price: '' })));
+                      setShowQuotation(false);
+                    }}
+                    className="px-5 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl transition-colors"
+                  >
+                    창 닫기
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      window.print();
+                    }}
+                    className="px-6 py-2.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold rounded-xl transition-all shadow-md flex items-center gap-1"
+                  >
+                    공식 견적서 인쇄 / PDF 저장 (Ctrl + P)
+                  </button>
+                </div>
+
+              </div>
+            </div>
+          )}
+
+          {/* Admin Panel Modal - CRUD Features Added */}
+          {showAdmin && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+              <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col transform transition-all duration-200 scale-100 animate-in fade-in zoom-in-95">
+                
+                {/* Modal Header */}
+                <div className="p-5 border-b border-slate-100 bg-neutral-950 text-white flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-extrabold text-xs">단가 정보 시스템 원장 수정</h3>
+                  </div>
+                  <button
+                    onClick={handleAdminLogout}
+                    className="text-slate-400 hover:text-white transition-colors text-xs font-bold"
+                  >
+                    닫기
+                  </button>
+                </div>
+
+                {/* Modal Content */}
+                <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+                  {!isAdminAuthenticated ? (
+                    // 암호 입력 판넬
+                    <div className="max-w-md mx-auto py-12 flex flex-col items-center gap-4">
+                      <div className="text-center">
+                        <h4 className="font-extrabold text-slate-800 text-base">보안 토큰 인증</h4>
+                        <p className="text-xs text-slate-400 mt-1">실시간 가격 수정을 위해 보안 마스터 인증이 필요합니다.</p>
+                        <p className="text-[10px] text-violet-600 font-bold mt-2 font-mono">인증 암호: pine1234</p>
+                      </div>
+                      <div className="w-full flex flex-col gap-2 mt-2">
+                        <input
+                          type="password"
+                          placeholder="마스터 암호를 입력하세요"
+                          value={adminPassword}
+                          onChange={(e) => setAdminPassword(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleAdminLogin();
+                          }}
+                          className="w-full px-4 py-2 rounded-xl border border-slate-300 text-center text-sm font-mono focus:border-violet-600 focus:outline-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAdminLogin}
+                          className="w-full py-2 bg-neutral-900 hover:bg-neutral-950 text-white font-bold text-xs rounded-xl transition-all"
+                        >
+                          시스템 마스터 로그인
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    // 단가 수정 및 추가/삭제 판넬
+                    <div className="flex flex-col gap-4">
+                      <div className="bg-violet-50 border border-violet-100 text-violet-800 rounded-xl p-4 flex justify-between items-center text-xs">
+                        <div>
+                          <strong>✓ 마스터 보안 터널 확보됨</strong>
+                          <p className="mt-1 text-violet-700">원단 및 부자재의 단가 조절, 신규 품목 추가 후 하단의 저장 단가 반영 버튼을 눌러주십시오.</p>
+                        </div>
+                        <button
+                          onClick={handleAdminLogout}
+                          className="bg-neutral-950 text-white hover:bg-neutral-800 px-3 py-1 rounded-lg font-bold"
+                        >
+                          인증 세션 해제
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        
+                        {/* 천소재 */}
+                        <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/40 flex flex-col justify-between">
+                          <div>
+                            <h4 className="font-bold text-slate-800 text-xs mb-3">천소재 단가 (원 / 회배)</h4>
+                            <div className="flex flex-col gap-2 max-h-56 overflow-y-auto pr-1">
+                              {Object.entries(editablePrices['천소재']).map(([key, value]) => (
+                                <div key={key} className="flex items-center justify-between gap-3 text-xs">
+                                  <span className="text-slate-600 w-24 truncate font-semibold">{key}</span>
+                                  <div className="flex items-center gap-1.5 ml-auto">
+                                    <div className="relative w-32">
+                                      <input
+                                        type="number"
+                                        value={value}
+                                        onChange={(e) => handlePriceFieldChange('천소재', key, e.target.value)}
+                                        className="w-full pl-3 pr-8 py-1 rounded border border-slate-300 text-right text-xs focus:outline-violet-600"
+                                      />
+                                      <span className="absolute right-3 top-1 text-slate-400">원</span>
+                                    </div>
+                                    <button 
+                                      type="button" 
+                                      onClick={() => handleRemoveItem('천소재', key)}
+                                      className="text-rose-500 hover:text-rose-700 text-[10px] font-bold px-2 py-1 bg-rose-50 hover:bg-rose-100 rounded border border-rose-200 whitespace-nowrap flex-shrink-0"
+                                      style={{ minWidth: '42px' }}
+                                    >
+                                      삭제
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          
+                          {/* 신규 천소재 등록 버퍼 */}
+                          <div className="mt-3 pt-3 border-t border-dashed border-slate-200">
+                            <div className="flex gap-1.5">
+                              <input 
+                                type="text" 
+                                placeholder="새 천소재명" 
+                                value={newInputName['천소재']}
+                                onChange={(e) => setNewItemName({ ...newInputName, '천소재': e.target.value })}
+                                className="flex-1 px-2 py-1 text-xs border border-slate-300 rounded focus:outline-violet-600"
+                              />
+                              <input 
+                                type="number" 
+                                placeholder="회배단가" 
+                                value={newInputPrice['천소재']}
+                                onChange={(e) => setNewItemPrice({ ...newInputPrice, '천소재': e.target.value })}
+                                className="w-16 px-2 py-1 text-xs border border-slate-300 rounded text-right focus:outline-violet-600"
+                              />
+                              <button 
+                                type="button" 
+                                onClick={() => handleAddNewItem('천소재')}
+                                className="bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs px-2.5 py-1 rounded"
+                              >
+                                추가
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 접착용소재 */}
+                        <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/40 flex flex-col justify-between">
+                          <div>
+                            <h4 className="font-bold text-slate-800 text-xs mb-3">접착용소재 단가 (원 / 회배)</h4>
+                            <div className="flex flex-col gap-2 max-h-56 overflow-y-auto pr-1">
+                              {Object.entries(editablePrices['접착용소재']).map(([key, value]) => (
+                                <div key={key} className="flex items-center justify-between gap-3 text-xs">
+                                  <span className="text-slate-600 w-24 truncate font-semibold">{key}</span>
+                                  <div className="flex items-center gap-1.5 ml-auto">
+                                    <div className="relative w-32">
+                                      <input
+                                        type="number"
+                                        value={value}
+                                        onChange={(e) => handlePriceFieldChange('접착용소재', key, e.target.value)}
+                                        className="w-full pl-3 pr-8 py-1 rounded border border-slate-300 text-right text-xs focus:outline-violet-600"
+                                      />
+                                      <span className="absolute right-3 top-1 text-slate-400">원</span>
+                                    </div>
+                                    <button 
+                                      type="button" 
+                                      onClick={() => handleRemoveItem('접착용소재', key)}
+                                      className="text-rose-500 hover:text-rose-700 text-[10px] font-bold px-2 py-1 bg-rose-50 hover:bg-rose-100 rounded border border-rose-200 whitespace-nowrap flex-shrink-0"
+                                      style={{ minWidth: '42px' }}
+                                    >
+                                      삭제
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* 신규 접착용소재 등록 버퍼 */}
+                          <div className="mt-3 pt-3 border-t border-dashed border-slate-200">
+                            <div className="flex gap-1.5">
+                              <input 
+                                type="text" 
+                                placeholder="새 접착재명" 
+                                value={newInputName['접착용소재']}
+                                onChange={(e) => setNewItemName({ ...newInputName, '접착용소재': e.target.value })}
+                                className="flex-1 px-2 py-1 text-xs border border-slate-300 rounded focus:outline-violet-600"
+                              />
+                              <input 
+                                type="number" 
+                                placeholder="회배단가" 
+                                value={newInputPrice['접착용소재']}
+                                onChange={(e) => setNewItemPrice({ ...newInputPrice, '접착용소재': e.target.value })}
+                                className="w-16 px-2 py-1 text-xs border border-slate-300 rounded text-right focus:outline-violet-600"
+                              />
+                              <button 
+                                type="button" 
+                                onClick={() => handleAddNewItem('접착용소재')}
+                                className="bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs px-2.5 py-1 rounded"
+                              >
+                                추가
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 비접착소재 */}
+                        <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/40 flex flex-col justify-between">
+                          <div>
+                            <h4 className="font-bold text-slate-800 text-xs mb-1">비접착소재 단가 (원 / 회배)</h4>
+                            <p className="text-[10px] text-slate-400 mb-2">T(두께) 규격 단위별 1회배 단가를 기입 및 제어할 수 있습니다.</p>
+                            <div className="flex flex-col gap-2 max-h-56 overflow-y-auto pr-1">
+                              {Object.entries(editablePrices['비접착소재']).map(([key, value]) => (
+                                <div key={key} className="flex items-center justify-between gap-3 text-xs">
+                                  <span className="text-slate-600 w-24 truncate font-bold text-slate-800">{key} 포멕스</span>
+                                  <div className="flex items-center gap-1.5 ml-auto">
+                                    <div className="relative w-32">
+                                      <input
+                                        type="number"
+                                        value={value}
+                                        onChange={(e) => handlePriceFieldChange('비접착소재', key, e.target.value)}
+                                        className="w-full pl-3 pr-8 py-1 rounded border border-slate-300 text-right text-xs focus:outline-violet-600"
+                                      />
+                                      <span className="absolute right-3 top-1 text-slate-400">원</span>
+                                    </div>
+                                    <button 
+                                      type="button" 
+                                      onClick={() => handleRemoveItem('비접착소재', key)}
+                                      className="text-rose-500 hover:text-rose-700 text-[10px] font-bold px-2 py-1 bg-rose-50 hover:bg-rose-100 rounded border border-rose-200 whitespace-nowrap flex-shrink-0"
+                                      style={{ minWidth: '42px' }}
+                                    >
+                                      삭제
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* 신규 비접착소재 등록 버퍼 */}
+                          <div className="mt-3 pt-3 border-t border-dashed border-slate-200">
+                            <div className="flex gap-1.5">
+                              <input 
+                                type="text" 
+                                placeholder="새 비접착(예: 12T)" 
+                                value={newInputName['비접착소재']}
+                                onChange={(e) => setNewItemName({ ...newInputName, '비접착소재': e.target.value })}
+                                className="flex-1 px-2 py-1 text-xs border border-slate-300 rounded focus:outline-violet-600"
+                              />
+                              <input 
+                                type="number" 
+                                placeholder="회배단가" 
+                                value={newInputPrice['비접착소재']}
+                                onChange={(e) => setNewItemPrice({ ...newInputPrice, '비접착소재': e.target.value })}
+                                className="w-16 px-2 py-1 text-xs border border-slate-300 rounded text-right focus:outline-violet-600"
+                              />
+                              <button 
+                                type="button" 
+                                onClick={() => handleAddNewItem('비접착소재')}
+                                className="bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs px-2.5 py-1 rounded"
+                              >
+                                추가
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 후가공 및 부가 추가소모품 */}
+                        <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/40 flex flex-col justify-between gap-3">
+                          <div>
+                            <h4 className="font-bold text-slate-800 text-xs mb-2">후가공 및 타공 가치 원장</h4>
+                            <div className="flex flex-col gap-2 max-h-36 overflow-y-auto pr-1">
+                              {Object.entries(editablePrices.processing).map(([key, value]) => (
+                                <div key={key} className="flex items-center justify-between gap-3 text-xs">
+                                  <span className="text-slate-600 w-24 truncate font-semibold">{key}</span>
+                                  <div className="flex items-center gap-1.5 ml-auto">
+                                    <div className="relative w-32">
+                                      <input
+                                        type="number"
+                                        value={value}
+                                        onChange={(e) => handlePriceFieldChange('processing', key, e.target.value)}
+                                        className="w-full pl-3 pr-8 py-1 rounded border border-slate-300 text-right text-xs focus:outline-violet-600"
+                                      />
+                                      <span className="absolute right-3 top-1 text-slate-400">원</span>
+                                    </div>
+                                    <button 
+                                      type="button" 
+                                      onClick={() => handleRemoveItem('processing', key)}
+                                      className="text-rose-500 hover:text-rose-700 text-[10px] font-bold px-2 py-1 bg-rose-50 hover:bg-rose-100 rounded border border-rose-200 whitespace-nowrap flex-shrink-0"
+                                      style={{ minWidth: '42px' }}
+                                    >
+                                      삭제
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* 신규 후가공 등록 버퍼 */}
+                            <div className="mt-2 pt-2 border-t border-dashed border-slate-200 flex gap-1.5">
+                              <input 
+                                type="text" 
+                                placeholder="새 가공명" 
+                                value={newInputName['processing']}
+                                onChange={(e) => setNewItemName({ ...newInputName, 'processing': e.target.value })}
+                                className="flex-1 px-2 py-1 text-xs border border-slate-300 rounded focus:outline-violet-600"
+                              />
+                              <input 
+                                type="number" 
+                                placeholder="단가" 
+                                value={newInputPrice['processing']}
+                                onChange={(e) => setNewItemPrice({ ...newInputPrice, 'processing': e.target.value })}
+                                className="w-16 px-2 py-1 text-xs border border-slate-300 rounded text-right focus:outline-violet-600"
+                              />
+                              <button 
+                                type="button" 
+                                onClick={() => handleAddNewItem('processing')}
+                                className="bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs px-2.5 py-1 rounded"
+                              >
+                                추가
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="border-t border-slate-200 pt-2">
+                            <h4 className="font-bold text-slate-800 text-xs mb-2">추가 구성 부속 단가</h4>
+                            <div className="flex flex-col gap-2 max-h-36 overflow-y-auto pr-1">
+                              {Object.entries(editablePrices.additional).map(([key, value]) => (
+                                <div key={key} className="flex items-center justify-between gap-3 text-xs">
+                                  <span className="text-slate-600 w-24 truncate font-semibold">{key}</span>
+                                  <div className="flex items-center gap-1.5 ml-auto">
+                                    <div className="relative w-32">
+                                      <input
+                                        type="number"
+                                        value={value}
+                                        onChange={(e) => handlePriceFieldChange('additional', key, e.target.value)}
+                                        className="w-full pl-3 pr-8 py-1 rounded border border-slate-300 text-right text-xs focus:outline-violet-600"
+                                      />
+                                      <span className="absolute right-3 top-1 text-slate-400">원</span>
+                                    </div>
+                                    <button 
+                                      type="button" 
+                                      onClick={() => handleRemoveItem('additional', key)}
+                                      className="text-rose-500 hover:text-rose-700 text-[10px] font-bold px-2 py-1 bg-rose-50 hover:bg-rose-100 rounded border border-rose-200 whitespace-nowrap flex-shrink-0"
+                                      style={{ minWidth: '42px' }}
+                                    >
+                                      삭제
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* 신규 추가소모품 등록 버퍼 */}
+                            <div className="mt-2 pt-2 border-t border-dashed border-slate-200 flex gap-1.5">
+                              <input 
+                                type="text" 
+                                placeholder="새 소모품명" 
+                                value={newInputName['additional']}
+                                onChange={(e) => setNewItemName({ ...newInputName, 'additional': e.target.value })}
+                                className="flex-1 px-2 py-1 text-xs border border-slate-300 rounded focus:outline-violet-600"
+                              />
+                              <input 
+                                type="number" 
+                                placeholder="단가" 
+                                value={newInputPrice['additional']}
+                                onChange={(e) => setNewItemPrice({ ...newInputPrice, 'additional': e.target.value })}
+                                className="w-16 px-2 py-1 text-xs border border-slate-300 rounded text-right focus:outline-violet-600"
+                              />
+                              <button 
+                                type="button" 
+                                onClick={() => handleAddNewItem('additional')}
+                                className="bg-violet-600 hover:bg-violet-700 text-white font-bold text-xs px-2.5 py-1 rounded"
+                              >
+                                추가
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Modal Footer */}
+                <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={handleAdminLogout}
+                    className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-lg transition-colors"
+                  >
+                    창 닫기
+                  </button>
+                  {isAdminAuthenticated && (
+                    <button
+                      type="button"
+                      onClick={handleSavePrices}
+                      className="px-5 py-2 bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold rounded-lg transition-all shadow-sm"
+                    >
+                      수정 단가 저장 및 즉각 반영
+                    </button>
+                  )}
+                </div>
+
+              </div>
+            </div>
+          )}
+
+          {/* 알림 모달창 */}
+          {alertModal.isOpen && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-55 p-4 no-print animate-in fade-in duration-100">
+              <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-5 border border-slate-200 transform transition-transform scale-100">
+                <div className="flex items-center gap-3 mb-3">
+                  <h4 className="font-black text-slate-900 text-sm">{alertModal.title}</h4>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line font-medium">{alertModal.message}</p>
+                <div className="mt-5 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setAlertModal({ ...alertModal, isOpen: false })}
+                    className="px-4 py-1.5 bg-neutral-900 text-white text-xs font-bold rounded-lg hover:bg-neutral-800"
+                  >
+                    확인
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Footer */}
+          <footer className="bg-slate-100 border-t border-slate-200 py-6 text-center text-xs text-slate-400 font-bold no-print">
+            <p>© 2026 FINE Communications. All rights reserved.</p>
+          </footer>
+
+        </div>
+      );
+    }
+
+    // React 18 루트 초기화 및 마운트
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
